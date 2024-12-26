@@ -1,0 +1,5 @@
+<library path="ackermann_planner">
+	<class type="ackermann_planner::AckermannPlanner" base_class_type="nav2_core::GlobalPlanner">
+	  <description></description>
+	</class>
+</library>
