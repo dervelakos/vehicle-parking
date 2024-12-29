@@ -153,3 +153,6 @@ AckermannPlanner::makePlan(
 }
 
 }
+
+#include "pluginlib/class_list_macros.hpp"
+PLUGINLIB_EXPORT_CLASS(ackermann_planner::AckermannPlanner, nav2_core::GlobalPlanner)
