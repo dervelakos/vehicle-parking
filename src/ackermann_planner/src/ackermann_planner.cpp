@@ -12,6 +12,7 @@
 //#include "rclcpp/rclcpp.hpp"
 //#include "rclcpp/logger.hpp"
 
+
 //#include "builtin_interfaces/msg/duration.hpp"
 #include "nav2_util/costmap.hpp"
 #include "nav2_util/node_utils.hpp"
@@ -50,6 +51,11 @@ AckermannPlanner::configure(
   auto node = parent.lock();
   clock_ = node->get_clock();
   logger_ = node->get_logger();
+
+  service = node->create_service<std_srvs::srv::Trigger>("step",
+			std::bind(&AckermannPlanner::step, this,
+			std::placeholders::_1,
+			std::placeholders::_2));
 
   RCLCPP_INFO(
     logger_, "Configuring plugin %s of type AckermannPlanner",
@@ -101,6 +107,18 @@ AckermannPlanner::cleanup()
     logger_, "Cleaning up plugin %s of type AckermannPlanner",
     name_.c_str());
   //planner_.reset();
+}
+
+void
+AckermannPlanner::step(const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+		       std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  UNUSED(request);
+  RCLCPP_INFO(
+    logger_, "TriggerService: Service triggered! Doing something...");
+  response->success = true;
+  response->message = "All good";
+
 }
 
 nav_msgs::msg::Path AckermannPlanner::createPlan(

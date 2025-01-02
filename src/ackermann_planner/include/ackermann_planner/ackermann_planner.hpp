@@ -1,6 +1,7 @@
 #ifndef ACKERMANN_PLANNER__ACKERMANN_PLANNER_HPP_
 #define ACKERMANN_PLANNER__ACKERMANN_PLANNER_HPP_
 
+#include "std_srvs/srv/trigger.hpp"
 //#include "geometry_msgs/msg/point.hpp"
 //#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav2_core/planner_exceptions.hpp"
@@ -83,6 +84,8 @@ protected:
     std::function<bool()> cancel_checker,
     nav_msgs::msg::Path & plan);
 
+  void step(const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+            std::shared_ptr<std_srvs::srv::Trigger::Response> response);
   // TF buffer
   std::shared_ptr<tf2_ros::Buffer> tf_;
 
@@ -97,6 +100,8 @@ protected:
 
   // The global frame of the costmap
   std::string global_frame_, name_;
+
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr service;
 };
 
 } // namespace ackermann_planner
