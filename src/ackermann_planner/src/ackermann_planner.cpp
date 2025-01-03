@@ -22,112 +22,92 @@
 
 using namespace std::chrono_literals;
 
-namespace ackermann_planner{
+namespace ackermann_planner
+{
 
 AckermannPlanner::AckermannPlanner()
 : tf_(nullptr), costmap_(nullptr)
 {
+
 }
 
 AckermannPlanner::~AckermannPlanner()
 {
-  RCLCPP_INFO(
-    logger_, "Destroying plugin %s of type AckermannPlanner",
-    name_.c_str());
+	RCLCPP_INFO(
+		logger_, "Destroying plugin %s of type AckermannPlanner",
+		name_.c_str());
 }
 
 void
 AckermannPlanner::configure(
-  const rclcpp_lifecycle::LifecycleNode::WeakPtr & parent,
-  std::string name, std::shared_ptr<tf2_ros::Buffer> tf,
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros)
+	const rclcpp_lifecycle::LifecycleNode::WeakPtr & parent,
+	std::string name, std::shared_ptr<tf2_ros::Buffer> tf,
+	std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros)
 {
-  tf_ = tf;
-  name_ = name;
-  costmap_ = costmap_ros->getCostmap();
-  global_frame_ = costmap_ros->getGlobalFrameID();
+	tf_ = tf;
+	name_ = name;
+	costmap_ = costmap_ros->getCostmap();
+	global_frame_ = costmap_ros->getGlobalFrameID();
 
-  //node_ = parent;
-  auto node = parent.lock();
-  clock_ = node->get_clock();
-  logger_ = node->get_logger();
+	//node_ = parent;
+	auto node = parent.lock();
+	clock_ = node->get_clock();
+	logger_ = node->get_logger();
 
-  service = node->create_service<std_srvs::srv::Trigger>("step",
-			std::bind(&AckermannPlanner::step, this,
-			std::placeholders::_1,
-			std::placeholders::_2));
+	service = node->create_service<std_srvs::srv::Trigger>("step",
+		std::bind(&AckermannPlanner::step, this,
+		std::placeholders::_1,
+		std::placeholders::_2));
 
-  RCLCPP_INFO(
-    logger_, "Configuring plugin %s of type AckermannPlanner",
-    name_.c_str());
-
-  // Initialize parameters
-  // Declare this plugin's parameters
-  //declare_parameter_if_not_declared(node, name + ".tolerance", rclcpp::ParameterValue(0.5));
-  //node->get_parameter(name + ".tolerance", tolerance_);
-  //declare_parameter_if_not_declared(node, name + ".use_astar", rclcpp::ParameterValue(false));
-  //node->get_parameter(name + ".use_astar", use_astar_);
-  //declare_parameter_if_not_declared(node, name + ".allow_unknown", rclcpp::ParameterValue(true));
-  //node->get_parameter(name + ".allow_unknown", allow_unknown_);
-  //declare_parameter_if_not_declared(
-    //node, name + ".use_final_approach_orientation", rclcpp::ParameterValue(false));
-  //node->get_parameter(name + ".use_final_approach_orientation", use_final_approach_orientation_);
+	RCLCPP_INFO(
+		logger_, "Configuring plugin %s of type AckermannPlanner",
+		name_.c_str());
 
 }
 
 void
 AckermannPlanner::activate()
 {
-  RCLCPP_INFO(
-    logger_, "Activating plugin %s of type AckermannPlanner",
-    name_.c_str());
-  // Add callback for dynamic parameters
-  //auto node = node_.lock();
-  //dyn_params_handler_ = node->add_on_set_parameters_callback(
-  //  std::bind(&AckermannPlanner::dynamicParametersCallback, this, _1));
+	RCLCPP_INFO(
+		logger_, "Activating plugin %s of type AckermannPlanner",
+		name_.c_str());
 }
 
 void
 AckermannPlanner::deactivate()
 {
-  RCLCPP_INFO(
-    logger_, "Deactivating plugin %s of type AckermannPlanner",
-    name_.c_str());
-  //auto node = node_.lock();
-  //if (dyn_params_handler_ && node) {
-  //  node->remove_on_set_parameters_callback(dyn_params_handler_.get());
-  //}
-  //dyn_params_handler_.reset();
+	RCLCPP_INFO(
+		logger_, "Deactivating plugin %s of type AckermannPlanner",
+		name_.c_str());
 }
 
 void
 AckermannPlanner::cleanup()
 {
-  RCLCPP_INFO(
-    logger_, "Cleaning up plugin %s of type AckermannPlanner",
-    name_.c_str());
-  //planner_.reset();
+	RCLCPP_INFO(
+		logger_, "Cleaning up plugin %s of type AckermannPlanner",
+		name_.c_str());
 }
 
 void
-AckermannPlanner::step(const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
-		       std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+AckermannPlanner::step(
+	const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+	std::shared_ptr<std_srvs::srv::Trigger::Response> response)
 {
-  UNUSED(request);
-  RCLCPP_INFO(
-    logger_, "TriggerService: Service triggered! Doing something...");
-  response->success = true;
-  response->message = "All good";
+	UNUSED(request);
+	RCLCPP_INFO(
+		logger_, "TriggerService: Service triggered! Doing something...");
 
+	response->success = true;
+	response->message = "All good";
 }
 
 nav_msgs::msg::Path AckermannPlanner::createPlan(
-  const geometry_msgs::msg::PoseStamped & start,
-  const geometry_msgs::msg::PoseStamped & goal,
-  std::function<bool()> cancel_checker)
+	const geometry_msgs::msg::PoseStamped & start,
+	const geometry_msgs::msg::PoseStamped & goal,
+	std::function<bool()> cancel_checker)
 {
 	nav_msgs::msg::Path path;
-
 
 	if (!makePlan(start.pose, goal.pose, 0, cancel_checker, path)) {
 		throw nav2_core::NoValidPathCouldBeFound(
@@ -139,10 +119,10 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 
 bool
 AckermannPlanner::makePlan(
-  const geometry_msgs::msg::Pose & start,
-  const geometry_msgs::msg::Pose & goal, double tolerance,
-  std::function<bool()> cancel_checker,
-  nav_msgs::msg::Path & plan)
+	const geometry_msgs::msg::Pose & start,
+	const geometry_msgs::msg::Pose & goal, double tolerance,
+	std::function<bool()> cancel_checker,
+	nav_msgs::msg::Path & plan)
 {
 	UNUSED(goal);
 	UNUSED(cancel_checker);
@@ -170,7 +150,7 @@ AckermannPlanner::makePlan(
 	return !plan.poses.empty();
 }
 
-}
+} // namespace ackermann_planner
 
 #include "pluginlib/class_list_macros.hpp"
 PLUGINLIB_EXPORT_CLASS(ackermann_planner::AckermannPlanner, nav2_core::GlobalPlanner)
