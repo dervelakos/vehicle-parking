@@ -1,8 +1,10 @@
 #include "ackermann_planner/ackermann_planner.hpp"
 
+#include <cmath>
 //#include <math.h>
 //#include <stdint.h>
-//#include <string.h>
+#include <string.h>
+#include <iostream>
 //#include <stdio.h>
 //#include <functional>
 //#include <chrono>
@@ -28,6 +30,8 @@ namespace ackermann_planner
 AckermannPlanner::AckermannPlanner()
 : tf_(nullptr), costmap_(nullptr)
 {
+	this->wheelBase = 90.0 * 0.0075; //0.75(ratio) % 100(cm to m)
+	this->maxSteeringAngle = 30.0;
 
 }
 
@@ -58,6 +62,13 @@ AckermannPlanner::configure(
 		std::bind(&AckermannPlanner::step, this,
 		std::placeholders::_1,
 		std::placeholders::_2));
+
+	poseArrayPub = node->create_publisher<geometry_msgs::msg::PoseArray>(
+			"/pose_array_topic", 10);
+	validPosePub = node->create_publisher<geometry_msgs::msg::PoseArray>(
+			"/valid_pose_topic", 10);
+	invalidPosePub = node->create_publisher<geometry_msgs::msg::PoseArray>(
+			"/invalid_pose_topic", 10);
 
 	RCLCPP_INFO(
 		logger_, "Configuring plugin %s of type AckermannPlanner",
@@ -98,6 +109,9 @@ AckermannPlanner::step(
 	RCLCPP_INFO(
 		logger_, "TriggerService: Service triggered! Doing something...");
 
+	RCLCPP_INFO(
+		logger_, "CostMap resolution: %f", costmap_->getResolution());
+
 	response->success = true;
 	response->message = "All good";
 }
@@ -107,7 +121,129 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 	const geometry_msgs::msg::PoseStamped & goal,
 	std::function<bool()> cancel_checker)
 {
+	RCLCPP_INFO(
+		logger_, "AckermannPlanner:: CreatePlan Method called");
 	nav_msgs::msg::Path path;
+
+	unsigned int mx_start, my_start;
+	unsigned int mx, my;
+	//std::stringstream strMap;
+
+	if (!costmap_->worldToMap(
+			start.pose.position.x,
+			start.pose.position.y,
+			mx_start,
+			my_start))
+	{
+		throw nav2_core::StartOutsideMapBounds(
+			"Start Coordinates of(" + std::to_string(start.pose.position.x) + ", " +
+			std::to_string(start.pose.position.y) + ") was outside bounds");
+	}
+
+	geometry_msgs::msg::PoseArray pose_array;
+	pose_array.header.stamp = clock_->now();
+	pose_array.header.frame_id = "map";
+
+	geometry_msgs::msg::PoseArray invalidPoses;
+	invalidPoses.header.stamp = clock_->now();
+	invalidPoses.header.frame_id = "map";
+
+	geometry_msgs::msg::PoseArray validPoses;
+	validPoses.header.stamp = clock_->now();
+	validPoses.header.frame_id = "map";
+
+
+	double qx = start.pose.orientation.x;
+	double qy = start.pose.orientation.y;
+	double qz = start.pose.orientation.z;
+	double qw = start.pose.orientation.w;
+
+	double yaw = std::atan2(
+			2.0 * (qw * qz + qx * qy),
+			1.0 - 2.0 * (qy * qy + qz * qz)
+	);
+
+	//This is all temp
+	int steps = 20;
+	int stepInc = (this->maxSteeringAngle * 2)/steps;
+	for (int i=0; i<=steps ; i++)
+	{
+		for (double j=0.0; j<9; j++){
+		double testAngle = double(-this->maxSteeringAngle) + (i * stepInc);
+		if(testAngle == 0)
+			continue;
+		double radSteering = testAngle * M_PI / 180.0;
+		double icrY = this->wheelBase / std::tan(radSteering);
+
+		double deltaTheta = j/icrY;
+		double ry = (icrY * std::cos(deltaTheta)) - icrY;
+		double rx = icrY * std::sin(deltaTheta);
+
+		RCLCPP_INFO(
+			logger_, "AckermannPlanner:: testAngle: %lf, icrY: %lf, delta: %lf",
+				testAngle, icrY, deltaTheta);
+
+		geometry_msgs::msg::Pose pose;
+		double rads = yaw;
+		pose.position.x = start.pose.position.x +
+			(rx * std::cos(rads)) - (ry * std::sin(rads));
+		pose.position.y = start.pose.position.y +
+			(rx * std::sin(rads)) - (ry * std::cos(rads));
+		pose.position.z = 0.0;
+		pose.orientation.x = 0.0;
+		pose.orientation.y = 0.0;
+		pose.orientation.z = std::sin((yaw-deltaTheta) / 2.0);
+		pose.orientation.w = std::cos((yaw-deltaTheta)/ 2.0);
+
+		pose_array.poses.push_back(pose);
+
+		if (!costmap_->worldToMap(
+				pose.position.x,
+				pose.position.y,
+				mx,
+				my))
+		{
+			invalidPoses.poses.push_back(pose);
+		}else{
+			if(costmap_->getCost(mx, my) < 252){
+				validPoses.poses.push_back(pose);
+			}else{
+				invalidPoses.poses.push_back(pose);
+			}
+		}
+
+		}
+
+	}
+
+	geometry_msgs::msg::Pose pose;
+	pose.position.x = start.pose.position.x;
+	pose.position.y = start.pose.position.y;
+	pose.position.z = 0.0;
+	pose.orientation.x = 0.0;
+	pose.orientation.y = 0.0;
+	pose.orientation.z = std::sin(yaw / 2.0);
+	pose.orientation.w = std::cos(yaw / 2.0);
+	pose_array.poses.push_back(pose);
+
+	poseArrayPub->publish(pose_array);
+	validPosePub->publish(validPoses);
+	invalidPosePub->publish(invalidPoses);
+
+	//for (unsigned int i=mx_start-5;i<mx_start+10;i++)
+	//{
+	//	for (unsigned int j=my_start-5;j<my_start+10;j++)
+	//	{
+	//		strMap << "C:" << static_cast<unsigned int>(costmap_->getCost(i, j));
+	//		//printf("%03d ",costmap_->getCost(i, j));
+	//	}
+	//	strMap << std::	endl;
+	//	//printf("\n");
+
+	//}
+	//RCLCPP_INFO(
+	//	logger_, "AckermannPlanner:: Map\n %s", strMap.str().c_str());
+
 
 	if (!makePlan(start.pose, goal.pose, 0, cancel_checker, path)) {
 		throw nav2_core::NoValidPathCouldBeFound(

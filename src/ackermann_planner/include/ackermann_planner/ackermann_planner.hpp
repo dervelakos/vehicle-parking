@@ -2,6 +2,7 @@
 #define ACKERMANN_PLANNER__ACKERMANN_PLANNER_HPP_
 
 #include "std_srvs/srv/trigger.hpp"
+#include "geometry_msgs/msg/pose_array.hpp"
 //#include "geometry_msgs/msg/point.hpp"
 //#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav2_core/planner_exceptions.hpp"
@@ -103,7 +104,13 @@ protected:
 	std::string global_frame_, name_;
 
 	rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr service;
-	};
+	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr poseArrayPub;
+	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr validPosePub;
+	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr invalidPosePub;
+	//Static definition for now, will import them as parameters later
+	double wheelBase; //Front-back wheels seperation
+	double maxSteeringAngle; //Maximum steering angle
+};
 
 } // namespace ackermann_planner
 
