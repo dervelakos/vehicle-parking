@@ -168,32 +168,39 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 	int stepInc = (this->maxSteeringAngle * 2)/steps;
 	for (int i=0; i<=steps ; i++)
 	{
-		for (double j=0.0; j<9; j++){
+		double ry, rx, deltaTheta;
+
+		for (double j=0.0; j<18; j+=0.5){
 		double testAngle = double(-this->maxSteeringAngle) + (i * stepInc);
-		if(testAngle == 0)
-			continue;
-		double radSteering = testAngle * M_PI / 180.0;
-		double icrY = this->wheelBase / std::tan(radSteering);
+		if(testAngle == 0){
+			ry = 0;
+			rx = j;
+			deltaTheta = 0;
+		}else{
+			double radSteering = testAngle * M_PI / 180.0;
+			double icrY = this->wheelBase / std::tan(radSteering);
 
-		double deltaTheta = j/icrY;
-		double ry = (icrY * std::cos(deltaTheta)) - icrY;
-		double rx = icrY * std::sin(deltaTheta);
-
+			deltaTheta = j/icrY;
+			if (std::abs(deltaTheta) > 2 * M_PI)
+				break; //We have done full circle
+			ry = (icrY * std::cos(deltaTheta)) - icrY;
+			rx = icrY * std::sin(deltaTheta);
+		}
 		RCLCPP_INFO(
-			logger_, "AckermannPlanner:: testAngle: %lf, icrY: %lf, delta: %lf",
-				testAngle, icrY, deltaTheta);
+			logger_, "AckermannPlanner:: testAngle: %lf, delta: %lf",
+				testAngle, deltaTheta);
 
 		geometry_msgs::msg::Pose pose;
 		double rads = yaw;
 		pose.position.x = start.pose.position.x +
-			(rx * std::cos(rads)) - (ry * std::sin(rads));
+			(rx * std::cos(rads)) + (ry * std::sin(rads));
 		pose.position.y = start.pose.position.y +
 			(rx * std::sin(rads)) - (ry * std::cos(rads));
 		pose.position.z = 0.0;
 		pose.orientation.x = 0.0;
 		pose.orientation.y = 0.0;
-		pose.orientation.z = std::sin((yaw-deltaTheta) / 2.0);
-		pose.orientation.w = std::cos((yaw-deltaTheta)/ 2.0);
+		pose.orientation.z = std::sin((yaw+deltaTheta) / 2.0);
+		pose.orientation.w = std::cos((yaw+deltaTheta)/ 2.0);
 
 		pose_array.poses.push_back(pose);
 
@@ -204,11 +211,13 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 				my))
 		{
 			invalidPoses.poses.push_back(pose);
+			break;
 		}else{
 			if(costmap_->getCost(mx, my) < 252){
 				validPoses.poses.push_back(pose);
 			}else{
 				invalidPoses.poses.push_back(pose);
+				break;
 			}
 		}
 
