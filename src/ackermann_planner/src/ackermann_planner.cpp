@@ -30,7 +30,7 @@ namespace ackermann_planner
 AckermannPlanner::AckermannPlanner()
 : tf_(nullptr), costmap_(nullptr)
 {
-	this->wheelBase = 90.0 * 0.0075; //0.75(ratio) % 100(cm to m)
+	this->wheelBase = 90.0 * 0.01; //0.75(ratio) % 100(cm to m)
 	this->maxSteeringAngle = 30.0;
 
 }
@@ -193,14 +193,14 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 		geometry_msgs::msg::Pose pose;
 		double rads = yaw;
 		pose.position.x = start.pose.position.x +
-			(rx * std::cos(rads)) + (ry * std::sin(rads));
+			(rx * std::cos(rads)) - (ry * std::sin(rads));
 		pose.position.y = start.pose.position.y +
-			(rx * std::sin(rads)) - (ry * std::cos(rads));
+			(rx * std::sin(rads)) + (ry * std::cos(rads));
 		pose.position.z = 0.0;
 		pose.orientation.x = 0.0;
 		pose.orientation.y = 0.0;
-		pose.orientation.z = std::sin((yaw+deltaTheta) / 2.0);
-		pose.orientation.w = std::cos((yaw+deltaTheta)/ 2.0);
+		pose.orientation.z = std::sin((yaw-deltaTheta) / 2.0);
+		pose.orientation.w = std::cos((yaw-deltaTheta)/ 2.0);
 
 		pose_array.poses.push_back(pose);
 
