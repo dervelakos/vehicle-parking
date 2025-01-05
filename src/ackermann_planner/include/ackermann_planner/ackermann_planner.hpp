@@ -1,6 +1,8 @@
 #ifndef ACKERMANN_PLANNER__ACKERMANN_PLANNER_HPP_
 #define ACKERMANN_PLANNER__ACKERMANN_PLANNER_HPP_
 
+#include "ackermann_planner/plan_node_list.hpp"
+
 #include "std_srvs/srv/trigger.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
 //#include "geometry_msgs/msg/point.hpp"
@@ -110,6 +112,8 @@ protected:
 	//Static definition for now, will import them as parameters later
 	double wheelBase; //Front-back wheels seperation
 	double maxSteeringAngle; //Maximum steering angle
+
+	PlanNodeList* openList;
 };
 
 } // namespace ackermann_planner

@@ -10,6 +10,7 @@
 //#include <chrono>
 //#include <cstdlib>
 //#include <memory>
+#include "geometry_msgs/msg/quaternion.hpp"
 
 //#include "rclcpp/rclcpp.hpp"
 //#include "rclcpp/logger.hpp"
@@ -27,11 +28,35 @@ using namespace std::chrono_literals;
 namespace ackermann_planner
 {
 
+double poseToYaw(geometry_msgs::msg::Pose p, bool degrees = true) {
+	/**
+	* Converts the qw and qz components of a quaternion (representing a rotation
+	* around the Z-axis) to yaw angle.
+	*
+	* Args:
+	*   qw: The real component of the quaternion.
+	*   qz: The z component of the imaginary part of the quaternion.
+	*   degrees: If true, return the yaw in degrees. Otherwise, return in radians.
+	*            Defaults to false (radians).
+	*
+	* Returns:
+	*   The yaw angle of the 2D plane.
+	*/
+	double yaw_radians = 2.0 * std::atan2(p.orientation.z, p.orientation.w);
+	if (degrees) {
+		return yaw_radians * 180.0 / M_PI;
+	} else {
+		return yaw_radians;
+	}
+}
+
 AckermannPlanner::AckermannPlanner()
 : tf_(nullptr), costmap_(nullptr)
 {
 	this->wheelBase = 90.0 * 0.01; //0.75(ratio) % 100(cm to m)
 	this->maxSteeringAngle = 30.0;
+
+	openList = new PlanNodeList();
 
 }
 
@@ -166,64 +191,82 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 	//This is all temp
 	int steps = 20;
 	int stepInc = (this->maxSteeringAngle * 2)/steps;
+	PlanNode* parent = NULL;
 	for (int i=0; i<=steps ; i++)
 	{
 		double ry, rx, deltaTheta;
 
 		for (double j=0.0; j<18; j+=0.5){
-		double testAngle = double(-this->maxSteeringAngle) + (i * stepInc);
-		if(testAngle == 0){
-			ry = 0;
-			rx = j;
-			deltaTheta = 0;
-		}else{
-			double radSteering = testAngle * M_PI / 180.0;
-			double icrY = this->wheelBase / std::tan(radSteering);
-
-			deltaTheta = j/icrY;
-			if (std::abs(deltaTheta) > 2 * M_PI)
-				break; //We have done full circle
-			ry = (icrY * std::cos(deltaTheta)) - icrY;
-			rx = icrY * std::sin(deltaTheta);
-		}
-		RCLCPP_INFO(
-			logger_, "AckermannPlanner:: testAngle: %lf, delta: %lf",
-				testAngle, deltaTheta);
-
-		geometry_msgs::msg::Pose pose;
-		double rads = yaw;
-		pose.position.x = start.pose.position.x +
-			(rx * std::cos(rads)) - (ry * std::sin(rads));
-		pose.position.y = start.pose.position.y +
-			(rx * std::sin(rads)) + (ry * std::cos(rads));
-		pose.position.z = 0.0;
-		pose.orientation.x = 0.0;
-		pose.orientation.y = 0.0;
-		pose.orientation.z = std::sin((yaw-deltaTheta) / 2.0);
-		pose.orientation.w = std::cos((yaw-deltaTheta)/ 2.0);
-
-		pose_array.poses.push_back(pose);
-
-		if (!costmap_->worldToMap(
-				pose.position.x,
-				pose.position.y,
-				mx,
-				my))
-		{
-			invalidPoses.poses.push_back(pose);
-			break;
-		}else{
-			if(costmap_->getCost(mx, my) < 252){
-				validPoses.poses.push_back(pose);
+			double testAngle = double(-this->maxSteeringAngle) + (i*stepInc);
+			if(testAngle == 0){
+				ry = 0;
+				rx = j;
+				deltaTheta = 0;
 			}else{
+				double radSteering = testAngle * M_PI / 180.0;
+				double icrY = this->wheelBase / std::tan(radSteering);
+
+				deltaTheta = j/icrY;
+				if (std::abs(deltaTheta) > 2 * M_PI)
+					break; //We have done full circle
+				ry = (icrY * std::cos(deltaTheta)) - icrY;
+				rx = icrY * std::sin(deltaTheta);
+			}
+			RCLCPP_INFO(
+				logger_, "AckermannPlanner:: testAngle: %lf, delta: %lf",
+					testAngle, deltaTheta);
+
+			geometry_msgs::msg::Pose pose;
+			double rads = yaw;
+			pose.position.x = start.pose.position.x +
+				(rx * std::cos(rads)) - (ry * std::sin(rads));
+			pose.position.y = start.pose.position.y +
+				(rx * std::sin(rads)) + (ry * std::cos(rads));
+			pose.position.z = 0.0;
+			pose.orientation.x = 0.0;
+			pose.orientation.y = 0.0;
+			pose.orientation.z = std::sin((yaw-deltaTheta) / 2.0);
+			pose.orientation.w = std::cos((yaw-deltaTheta)/ 2.0);
+
+			pose_array.poses.push_back(pose);
+
+			if (!costmap_->worldToMap(
+					pose.position.x,
+					pose.position.y,
+					mx,
+					my))
+			{
 				invalidPoses.poses.push_back(pose);
 				break;
+			}else{
+				if(costmap_->getCost(mx, my) < 252){
+					validPoses.poses.push_back(pose);
+
+					int iteration = 0;
+					if (parent)
+						iteration = parent->getIteration() + 1;
+
+					double cost = 0;
+					cost += iteration * 10000;
+					cost += abs(goal.pose.position.x - pose.position.x);
+					cost += abs(goal.pose.position.y - pose.position.y);
+					cost += abs(poseToYaw(goal.pose) - poseToYaw(pose));
+
+					PlanNode* node =
+						new PlanNode(pose, iteration, cost);
+					openList->insertNode(node);
+				}else{
+					invalidPoses.poses.push_back(pose);
+					break;
+				}
 			}
-		}
 
 		}
 
 	}
+
+
+	openList->printList();
 
 	geometry_msgs::msg::Pose pose;
 	pose.position.x = start.pose.position.x;
