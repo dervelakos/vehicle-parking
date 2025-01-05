@@ -5,6 +5,7 @@
 //#include <stdint.h>
 #include <string.h>
 #include <iostream>
+#include <stack>
 //#include <stdio.h>
 //#include <functional>
 //#include <chrono>
@@ -42,7 +43,16 @@ double poseToYaw(geometry_msgs::msg::Pose p, bool degrees = true) {
 	* Returns:
 	*   The yaw angle of the 2D plane.
 	*/
-	double yaw_radians = 2.0 * std::atan2(p.orientation.z, p.orientation.w);
+	double qx = p.orientation.x;
+	double qy = p.orientation.y;
+	double qz = p.orientation.z;
+	double qw = p.orientation.w;
+
+	double yaw_radians = std::atan2(
+			2.0 * (qw * qz + qx * qy),
+			1.0 - 2.0 * (qy * qy + qz * qz)
+	);
+
 	if (degrees) {
 		return yaw_radians * 180.0 / M_PI;
 	} else {
@@ -88,12 +98,12 @@ AckermannPlanner::configure(
 		std::placeholders::_1,
 		std::placeholders::_2));
 
-	poseArrayPub = node->create_publisher<geometry_msgs::msg::PoseArray>(
-			"/pose_array_topic", 10);
 	validPosePub = node->create_publisher<geometry_msgs::msg::PoseArray>(
 			"/valid_pose_topic", 10);
 	invalidPosePub = node->create_publisher<geometry_msgs::msg::PoseArray>(
 			"/invalid_pose_topic", 10);
+	pathPub = node->create_publisher<geometry_msgs::msg::PoseArray>(
+			"/path_pose_topic", 10);
 
 	RCLCPP_INFO(
 		logger_, "Configuring plugin %s of type AckermannPlanner",
@@ -141,6 +151,86 @@ AckermannPlanner::step(
 	response->message = "All good";
 }
 
+geometry_msgs::msg::Pose
+generatePose(const geometry_msgs::msg::Pose initialPose,
+			 double angle,
+			 double distance,
+			 double wheelBase,
+			 double *deltaTheta)
+{
+	double ry, rx;
+
+	if(angle == 0){
+		ry = 0;
+		rx = distance;
+		*deltaTheta = 0;
+	}else{
+		double radSteering = angle * M_PI / 180.0;
+		double icrY = wheelBase / std::tan(radSteering);
+
+		*deltaTheta = distance/icrY;
+		ry = (icrY * std::cos(*deltaTheta)) - icrY;
+		rx = icrY * std::sin(*deltaTheta);
+	}
+
+	geometry_msgs::msg::Pose pose;
+	double yaw = poseToYaw(initialPose, false);
+	pose.position.x = initialPose.position.x +
+		(rx * std::cos(yaw)) - (ry * std::sin(yaw));
+	pose.position.y = initialPose.position.y +
+		(rx * std::sin(yaw)) + (ry * std::cos(yaw));
+
+	pose.position.z = 0.0;
+	pose.orientation.x = 0.0;
+	pose.orientation.y = 0.0;
+	pose.orientation.z = std::sin((yaw-*deltaTheta) / 2.0);
+	pose.orientation.w = std::cos((yaw-*deltaTheta)/ 2.0);
+
+	return pose;
+}
+
+bool
+poseInToleranceRange(const geometry_msgs::msg::Pose goal,
+					const geometry_msgs::msg::Pose newPose,
+					double tolerance)
+{
+	if (std::abs(goal.position.x - newPose.position.x) > tolerance)
+		return false;
+	if (std::abs(goal.position.y - newPose.position.y) > tolerance)
+		return false;
+	if (std::abs(goal.position.z - newPose.position.z) > tolerance)
+		return false;
+
+	if (std::abs(goal.orientation.x - newPose.orientation.x) > tolerance)
+		return false;
+	if (std::abs(goal.orientation.y - newPose.orientation.y) > tolerance)
+		return false;
+	if (std::abs(goal.orientation.z - newPose.orientation.z) > tolerance)
+		return false;
+	if (std::abs(goal.orientation.w - newPose.orientation.w) > tolerance)
+		return false;
+
+	return true;
+}
+
+PlanNode*
+createPlanNode(PlanNode *parent,
+			   const geometry_msgs::msg::Pose goal,
+			   geometry_msgs::msg::Pose pose)
+{
+	int iteration = 0;
+	if (parent)
+		iteration = parent->getIteration() + 1;
+
+	double cost = 0;
+	cost += iteration * 10000;
+	cost += abs(goal.position.x - pose.position.x);
+	cost += abs(goal.position.y - pose.position.y);
+	cost += abs(poseToYaw(goal) - poseToYaw(pose));
+
+	return new PlanNode(pose, iteration, cost, parent);
+}
+
 nav_msgs::msg::Path AckermannPlanner::createPlan(
 	const geometry_msgs::msg::PoseStamped & start,
 	const geometry_msgs::msg::PoseStamped & goal,
@@ -165,10 +255,6 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 			std::to_string(start.pose.position.y) + ") was outside bounds");
 	}
 
-	geometry_msgs::msg::PoseArray pose_array;
-	pose_array.header.stamp = clock_->now();
-	pose_array.header.frame_id = "map";
-
 	geometry_msgs::msg::PoseArray invalidPoses;
 	invalidPoses.header.stamp = clock_->now();
 	invalidPoses.header.frame_id = "map";
@@ -177,110 +263,111 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 	validPoses.header.stamp = clock_->now();
 	validPoses.header.frame_id = "map";
 
+	geometry_msgs::msg::PoseArray pathPoses;
+	pathPoses.header.stamp = clock_->now();
+	pathPoses.header.frame_id = "map";
 
-	double qx = start.pose.orientation.x;
-	double qy = start.pose.orientation.y;
-	double qz = start.pose.orientation.z;
-	double qw = start.pose.orientation.w;
-
-	double yaw = std::atan2(
-			2.0 * (qw * qz + qx * qy),
-			1.0 - 2.0 * (qy * qy + qz * qz)
-	);
 
 	//This is all temp
 	int steps = 20;
 	int stepInc = (this->maxSteeringAngle * 2)/steps;
-	PlanNode* parent = NULL;
-	for (int i=0; i<=steps ; i++)
-	{
-		double ry, rx, deltaTheta;
+	PlanNode *parent = NULL, *found = NULL;
+	geometry_msgs::msg::Pose cur = start.pose;
+	geometry_msgs::msg::Pose newPose;
 
-		for (double j=0.0; j<18; j+=0.5){
-			double testAngle = double(-this->maxSteeringAngle) + (i*stepInc);
-			if(testAngle == 0){
-				ry = 0;
-				rx = j;
-				deltaTheta = 0;
-			}else{
-				double radSteering = testAngle * M_PI / 180.0;
-				double icrY = this->wheelBase / std::tan(radSteering);
+	bool pathFound = false;
 
-				deltaTheta = j/icrY;
-				if (std::abs(deltaTheta) > 2 * M_PI)
-					break; //We have done full circle
-				ry = (icrY * std::cos(deltaTheta)) - icrY;
-				rx = icrY * std::sin(deltaTheta);
-			}
-			RCLCPP_INFO(
-				logger_, "AckermannPlanner:: testAngle: %lf, delta: %lf",
-					testAngle, deltaTheta);
+	while(!pathFound){
 
-			geometry_msgs::msg::Pose pose;
-			double rads = yaw;
-			pose.position.x = start.pose.position.x +
-				(rx * std::cos(rads)) - (ry * std::sin(rads));
-			pose.position.y = start.pose.position.y +
-				(rx * std::sin(rads)) + (ry * std::cos(rads));
-			pose.position.z = 0.0;
-			pose.orientation.x = 0.0;
-			pose.orientation.y = 0.0;
-			pose.orientation.z = std::sin((yaw-deltaTheta) / 2.0);
-			pose.orientation.w = std::cos((yaw-deltaTheta)/ 2.0);
+		for (int i=0; i<=steps ; i++)
+		{
 
-			pose_array.poses.push_back(pose);
+			for (double j=-9; j<9; j+=0.5){
+				double deltaTheta;
+				double testAngle = double(-this->maxSteeringAngle) + (i*stepInc);
 
-			if (!costmap_->worldToMap(
-					pose.position.x,
-					pose.position.y,
-					mx,
-					my))
-			{
-				invalidPoses.poses.push_back(pose);
-				break;
-			}else{
-				if(costmap_->getCost(mx, my) < 252){
-					validPoses.poses.push_back(pose);
+				newPose = generatePose(cur, testAngle, j, this->wheelBase, &deltaTheta);
 
-					int iteration = 0;
-					if (parent)
-						iteration = parent->getIteration() + 1;
-
-					double cost = 0;
-					cost += iteration * 10000;
-					cost += abs(goal.pose.position.x - pose.position.x);
-					cost += abs(goal.pose.position.y - pose.position.y);
-					cost += abs(poseToYaw(goal.pose) - poseToYaw(pose));
-
-					PlanNode* node =
-						new PlanNode(pose, iteration, cost);
-					openList->insertNode(node);
-				}else{
-					invalidPoses.poses.push_back(pose);
+				if (!costmap_->worldToMap(
+						newPose.position.x,
+						newPose.position.y,
+						mx,
+						my))
+				{
+					//invalidPoses.poses.push_back(newPose);
 					break;
+				}else{
+					if(costmap_->getCost(mx, my) < 252){
+						//validPoses.poses.push_back(newPose);
+						PlanNode *tmpNode = createPlanNode(parent,
+														goal.pose,
+														newPose);
+						openList->insertNode(tmpNode);
+
+						if (poseInToleranceRange(goal.pose, newPose, 0.4)){
+							RCLCPP_INFO(
+								logger_, "AckermannPlanner:: Found path!\n");
+							found = tmpNode;
+							pathFound = true;
+							break;
+						}
+
+					}else{
+						//invalidPoses.poses.push_back(newPose);
+						break;
+					}
 				}
+
 			}
+
+			//validPosePub->publish(validPoses);
+			//invalidPosePub->publish(invalidPoses);
 
 		}
+
+		parent = openList->removeLeastCost();
+		cur = parent->getPose();
 
 	}
 
 
-	openList->printList();
+	//openList->printList();
 
-	geometry_msgs::msg::Pose pose;
-	pose.position.x = start.pose.position.x;
-	pose.position.y = start.pose.position.y;
-	pose.position.z = 0.0;
-	pose.orientation.x = 0.0;
-	pose.orientation.y = 0.0;
-	pose.orientation.z = std::sin(yaw / 2.0);
-	pose.orientation.w = std::cos(yaw / 2.0);
-	pose_array.poses.push_back(pose);
-
-	poseArrayPub->publish(pose_array);
 	validPosePub->publish(validPoses);
 	invalidPosePub->publish(invalidPoses);
+
+
+	if (pathFound) {
+		PlanNode *unravel = found;
+		std::stack<geometry_msgs::msg::Pose> tmpList;
+		while (unravel != NULL) {
+			tmpList.push(unravel->getPose());
+			unravel = unravel->getParent();
+		}
+
+		// clear the plan, just in case
+		path.poses.clear();
+
+		path.header.stamp = clock_->now();
+		path.header.frame_id = global_frame_;
+
+		geometry_msgs::msg::PoseStamped origin;
+		origin.pose = start.pose;
+		path.poses.push_back(origin);
+
+		while (!tmpList.empty()) {
+			geometry_msgs::msg::PoseStamped p;
+			p.pose = tmpList.top();
+			tmpList.pop();
+			path.poses.push_back(p);
+			pathPoses.poses.push_back(p.pose);
+
+		}
+		pathPub->publish(pathPoses);
+	}
+
+
+	return path;
 
 	//for (unsigned int i=mx_start-5;i<mx_start+10;i++)
 	//{

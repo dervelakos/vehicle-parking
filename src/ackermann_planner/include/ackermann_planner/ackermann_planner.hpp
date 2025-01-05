@@ -106,9 +106,9 @@ protected:
 	std::string global_frame_, name_;
 
 	rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr service;
-	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr poseArrayPub;
 	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr validPosePub;
 	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr invalidPosePub;
+	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pathPub;
 	//Static definition for now, will import them as parameters later
 	double wheelBase; //Front-back wheels seperation
 	double maxSteeringAngle; //Maximum steering angle

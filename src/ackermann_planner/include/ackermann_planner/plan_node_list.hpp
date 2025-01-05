@@ -5,7 +5,7 @@
 
 class PlanNode {
 public:
-	PlanNode(geometry_msgs::msg::Pose pose, int iteration, double cost);
+	PlanNode(geometry_msgs::msg::Pose pose, int iteration, double cost, PlanNode *parent);
 
 	PlanNode* getNext();
 	PlanNode* getPrev();
@@ -16,6 +16,7 @@ public:
 	geometry_msgs::msg::Pose getPose();
 	double getCost();
 	int getIteration();
+	PlanNode* getParent();
 
 	void insertAfter(PlanNode* node);
 	void insertBefore(PlanNode* node);
@@ -23,6 +24,7 @@ private:
 	geometry_msgs::msg::Pose pose_;
 	int iteration_;
 	double cost_;
+	PlanNode *parent_;
 
 	PlanNode *next;
 	PlanNode *prev;

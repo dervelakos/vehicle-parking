@@ -1,7 +1,10 @@
 #include "ackermann_planner/plan_node_list.hpp"
 
-PlanNode::PlanNode(geometry_msgs::msg::Pose pose, int iteration, double cost) :
-	pose_(pose), iteration_(iteration), cost_(cost){
+PlanNode::PlanNode(geometry_msgs::msg::Pose pose,
+		int iteration,
+		double cost,
+		PlanNode* parent)
+: pose_(pose), iteration_(iteration), cost_(cost), parent_(parent){
 	this->next = NULL;
 	this->prev = NULL;
 }
@@ -20,6 +23,10 @@ double PlanNode::getCost() {
 
 int PlanNode::getIteration() {
 	return iteration_;
+}
+
+PlanNode* PlanNode::getParent() {
+	return parent_;
 }
 
 geometry_msgs::msg::Pose PlanNode::getPose() {
