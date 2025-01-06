@@ -67,6 +67,7 @@ AckermannPlanner::AckermannPlanner()
 	this->maxSteeringAngle = 30.0;
 
 	openList = new PlanNodeList();
+	stepFlag = false;
 
 }
 
@@ -147,6 +148,8 @@ AckermannPlanner::step(
 	RCLCPP_INFO(
 		logger_, "CostMap resolution: %f", costmap_->getResolution());
 
+	stepFlag = true;
+
 	response->success = true;
 	response->message = "All good";
 }
@@ -163,7 +166,7 @@ generatePose(const geometry_msgs::msg::Pose initialPose,
 	if(angle == 0){
 		ry = 0;
 		rx = distance;
-		*deltaTheta = 0;
+		*deltaTheta = 0.0;
 	}else{
 		double radSteering = angle * M_PI / 180.0;
 		double icrY = wheelBase / std::tan(radSteering);
@@ -216,6 +219,7 @@ poseInToleranceRange(const geometry_msgs::msg::Pose goal,
 PlanNode*
 createPlanNode(PlanNode *parent,
 			   const geometry_msgs::msg::Pose goal,
+			   const geometry_msgs::msg::Pose prev,
 			   geometry_msgs::msg::Pose pose)
 {
 	int iteration = 0;
@@ -223,12 +227,52 @@ createPlanNode(PlanNode *parent,
 		iteration = parent->getIteration() + 1;
 
 	double cost = 0;
+	if(parent)
+		cost += parent->getCost();
 	cost += iteration * 10000;
 	cost += abs(goal.position.x - pose.position.x);
 	cost += abs(goal.position.y - pose.position.y);
 	cost += abs(poseToYaw(goal) - poseToYaw(pose));
 
-	return new PlanNode(pose, iteration, cost, parent);
+	cost += (9 - abs(pose.position.x - prev.position.x)) * 1000;
+	cost += (9 - abs(pose.position.y - prev.position.y)) * 1000;
+
+	return new PlanNode(pose, iteration, cost, parent);}
+
+PlanNode* AckermannPlanner::registerPose( geometry_msgs::msg::Pose pose,
+		geometry_msgs::msg::Pose goal,
+		geometry_msgs::msg::Pose cur,
+		PlanNode *parent,
+		bool *found)
+{
+	unsigned int mx, my;
+
+	if (!costmap_->worldToMap(
+			pose.position.x,
+			pose.position.y,
+			mx,
+			my))
+	{
+		return NULL;
+	}
+	if(costmap_->getCost(mx, my) >= 252){
+		return NULL;
+	}
+
+	PlanNode *tmpNode = createPlanNode(parent,
+									goal,
+									cur,
+									pose);
+	openList->insertNode(tmpNode);
+
+	if (poseInToleranceRange(goal, pose, 0.4)){
+		RCLCPP_INFO(
+			logger_, "AckermannPlanner:: Found path!\n");
+		*found = true;
+	}
+
+	return tmpNode;
+
 }
 
 nav_msgs::msg::Path AckermannPlanner::createPlan(
@@ -241,7 +285,6 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 	nav_msgs::msg::Path path;
 
 	unsigned int mx_start, my_start;
-	unsigned int mx, my;
 	//std::stringstream strMap;
 
 	if (!costmap_->worldToMap(
@@ -276,57 +319,83 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 	geometry_msgs::msg::Pose newPose;
 
 	bool pathFound = false;
+	int lastGen = 0;
 
 	while(!pathFound){
 
+		if(!stepFlag){
+			usleep(1000);
+			continue;
+		}
+
+		stepFlag = false;
+
 		for (int i=0; i<=steps ; i++)
 		{
+			bool forwardValid = true;
+			bool reverseValid = true;
 
-			for (double j=-9; j<9; j+=0.5){
-				double deltaTheta;
+			for (double j=0.5; j<9; j+=0.5){
+				double deltaThetaForward = 0;
+				double deltaThetaReverse = 0;
 				double testAngle = double(-this->maxSteeringAngle) + (i*stepInc);
+				PlanNode *newNode;
 
-				newPose = generatePose(cur, testAngle, j, this->wheelBase, &deltaTheta);
-
-				if (!costmap_->worldToMap(
-						newPose.position.x,
-						newPose.position.y,
-						mx,
-						my))
-				{
-					//invalidPoses.poses.push_back(newPose);
-					break;
-				}else{
-					if(costmap_->getCost(mx, my) < 252){
-						//validPoses.poses.push_back(newPose);
-						PlanNode *tmpNode = createPlanNode(parent,
-														goal.pose,
-														newPose);
-						openList->insertNode(tmpNode);
-
-						if (poseInToleranceRange(goal.pose, newPose, 0.4)){
-							RCLCPP_INFO(
-								logger_, "AckermannPlanner:: Found path!\n");
-							found = tmpNode;
-							pathFound = true;
-							break;
-						}
-
+				if (forwardValid){
+					newPose = generatePose(cur, testAngle, j,
+									this->wheelBase, &deltaThetaForward);
+					newNode = registerPose(newPose, goal.pose, cur, parent, &pathFound);
+					if (newNode){
+						validPoses.poses.push_back(newPose);
+						if (pathFound)
+							found = newNode;
 					}else{
-						//invalidPoses.poses.push_back(newPose);
-						break;
+						forwardValid = false;
+						invalidPoses.poses.push_back(newPose);
 					}
 				}
 
+				if (reverseValid){
+					newPose = generatePose(cur, testAngle, -j,
+									this->wheelBase, &deltaThetaReverse);
+					newNode = registerPose(newPose, goal.pose, cur, parent, &pathFound);
+					if (newNode){
+						validPoses.poses.push_back(newPose);
+						if (pathFound)
+							found = newNode;
+					}else{
+						reverseValid = false;
+						invalidPoses.poses.push_back(newPose);
+					}
+				}
+
+				if (pathFound)
+					break;
+
+				if (std::abs(deltaThetaForward) + std::abs(deltaThetaReverse) >
+							2 * M_PI)
+					break;
+
+				if (!forwardValid && !reverseValid)
+					break;
 			}
 
-			//validPosePub->publish(validPoses);
-			//invalidPosePub->publish(invalidPoses);
+			validPosePub->publish(validPoses);
+			invalidPosePub->publish(invalidPoses);
 
 		}
 
 		parent = openList->removeLeastCost();
+		if (parent == NULL)
+			break;
 		cur = parent->getPose();
+
+		if (parent->getIteration() != lastGen){
+			lastGen = parent->getIteration();
+			RCLCPP_INFO(
+				logger_, "AckermannPlanner:: New iteration: %d!\n", lastGen);
+			//validPosePub->publish(validPoses);
+		}
 
 	}
 
@@ -342,6 +411,7 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 		std::stack<geometry_msgs::msg::Pose> tmpList;
 		while (unravel != NULL) {
 			tmpList.push(unravel->getPose());
+			printf("Unravel:%u\n",unravel->getIteration());
 			unravel = unravel->getParent();
 		}
 

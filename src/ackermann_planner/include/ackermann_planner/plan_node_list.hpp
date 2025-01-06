@@ -5,7 +5,10 @@
 
 class PlanNode {
 public:
-	PlanNode(geometry_msgs::msg::Pose pose, int iteration, double cost, PlanNode *parent);
+	PlanNode(geometry_msgs::msg::Pose pose,
+			int iteration,
+			double cost,
+			PlanNode *parent);
 
 	PlanNode* getNext();
 	PlanNode* getPrev();

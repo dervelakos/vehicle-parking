@@ -90,6 +90,13 @@ protected:
 	void step(const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
 			  std::shared_ptr<std_srvs::srv::Trigger::Response> response);
 
+
+	PlanNode* registerPose(geometry_msgs::msg::Pose pose,
+					  geometry_msgs::msg::Pose goal,
+					  geometry_msgs::msg::Pose cur,
+					  PlanNode *parent,
+					  bool *found);
+
 	// TF buffer
 	std::shared_ptr<tf2_ros::Buffer> tf_;
 
@@ -114,6 +121,7 @@ protected:
 	double maxSteeringAngle; //Maximum steering angle
 
 	PlanNodeList* openList;
+	bool stepFlag;
 };
 
 } // namespace ackermann_planner
