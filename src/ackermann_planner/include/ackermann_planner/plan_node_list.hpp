@@ -8,6 +8,8 @@ public:
 	PlanNode(geometry_msgs::msg::Pose pose,
 			int iteration,
 			double cost,
+			double angle,
+			double distance,
 			PlanNode *parent);
 
 	PlanNode* getNext();
@@ -20,6 +22,8 @@ public:
 	double getCost();
 	int getIteration();
 	PlanNode* getParent();
+	double getAngle();
+	double getDistance();
 
 	void insertAfter(PlanNode* node);
 	void insertBefore(PlanNode* node);
@@ -28,6 +32,8 @@ private:
 	int iteration_;
 	double cost_;
 	PlanNode *parent_;
+	double angle_;
+	double distance_;
 
 	PlanNode *next;
 	PlanNode *prev;

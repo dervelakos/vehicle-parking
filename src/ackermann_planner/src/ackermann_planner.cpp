@@ -220,7 +220,9 @@ PlanNode*
 createPlanNode(PlanNode *parent,
 			   const geometry_msgs::msg::Pose goal,
 			   const geometry_msgs::msg::Pose prev,
-			   geometry_msgs::msg::Pose pose)
+			   geometry_msgs::msg::Pose pose,
+			   double angle,
+			   double distance)
 {
 	int iteration = 0;
 	if (parent)
@@ -237,15 +239,39 @@ createPlanNode(PlanNode *parent,
 	cost += (9 - abs(pose.position.x - prev.position.x)) * 1000;
 	cost += (9 - abs(pose.position.y - prev.position.y)) * 1000;
 
-	return new PlanNode(pose, iteration, cost, parent);}
+	return new PlanNode(pose, iteration, cost, angle, distance, parent);
+}
+
+void AckermannPlanner::createArcPath(geometry_msgs::msg::Pose initial,
+				   PlanNode* node,
+				   nav_msgs::msg::Path *path)
+{
+	double theta;
+	const int direction = (node->getDistance() > 0) - (node->getDistance() < 0);
+	const double stepLength = 0.5 * direction;
+	const double steps = std::abs(node->getDistance()) / 0.5;
+
+	for (int j=1; j<=steps; j++){
+		geometry_msgs::msg::PoseStamped p;
+		p.pose = generatePose(initial, node->getAngle(), stepLength * j,
+				this->wheelBase, &theta);
+
+		path->poses.push_back(p);
+
+	}
+}
 
 PlanNode* AckermannPlanner::registerPose( geometry_msgs::msg::Pose pose,
 		geometry_msgs::msg::Pose goal,
 		geometry_msgs::msg::Pose cur,
 		PlanNode *parent,
+		double angle,
+		double distance,
 		bool *found)
 {
 	unsigned int mx, my;
+
+	*found = false;
 
 	if (!costmap_->worldToMap(
 			pose.position.x,
@@ -262,7 +288,9 @@ PlanNode* AckermannPlanner::registerPose( geometry_msgs::msg::Pose pose,
 	PlanNode *tmpNode = createPlanNode(parent,
 									goal,
 									cur,
-									pose);
+									pose,
+									angle,
+									distance);
 	openList->insertNode(tmpNode);
 
 	if (poseInToleranceRange(goal, pose, 0.4)){
@@ -323,32 +351,42 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 
 	while(!pathFound){
 
+		if(cancel_checker())
+			break;
+
 		if(!stepFlag){
 			usleep(1000);
 			continue;
 		}
 
-		stepFlag = false;
+		//stepFlag = false;
 
 		for (int i=0; i<=steps ; i++)
 		{
+			double testAngle = double(-this->maxSteeringAngle) + (i*stepInc);
 			bool forwardValid = true;
 			bool reverseValid = true;
+			bool res = false;
+
+			if (parent && parent->getAngle() == testAngle)
+				continue;
 
 			for (double j=0.5; j<9; j+=0.5){
 				double deltaThetaForward = 0;
 				double deltaThetaReverse = 0;
-				double testAngle = double(-this->maxSteeringAngle) + (i*stepInc);
 				PlanNode *newNode;
 
 				if (forwardValid){
 					newPose = generatePose(cur, testAngle, j,
 									this->wheelBase, &deltaThetaForward);
-					newNode = registerPose(newPose, goal.pose, cur, parent, &pathFound);
+					newNode = registerPose(newPose, goal.pose, cur, parent,
+										   testAngle, j, &res);
 					if (newNode){
 						validPoses.poses.push_back(newPose);
-						if (pathFound)
+						if (res){
+							pathFound = true;
 							found = newNode;
+						}
 					}else{
 						forwardValid = false;
 						invalidPoses.poses.push_back(newPose);
@@ -358,11 +396,14 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 				if (reverseValid){
 					newPose = generatePose(cur, testAngle, -j,
 									this->wheelBase, &deltaThetaReverse);
-					newNode = registerPose(newPose, goal.pose, cur, parent, &pathFound);
+					newNode = registerPose(newPose, goal.pose, cur, parent,
+										   testAngle, -j, &res);
 					if (newNode){
 						validPoses.poses.push_back(newPose);
-						if (pathFound)
+						if (res){
+							pathFound = true;
 							found = newNode;
+						}
 					}else{
 						reverseValid = false;
 						invalidPoses.poses.push_back(newPose);
@@ -408,10 +449,10 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 
 	if (pathFound) {
 		PlanNode *unravel = found;
-		std::stack<geometry_msgs::msg::Pose> tmpList;
+		//std::stack<geometry_msgs::msg::Pose> tmpList;
+		std::stack<PlanNode*> tmpList;
 		while (unravel != NULL) {
-			tmpList.push(unravel->getPose());
-			printf("Unravel:%u\n",unravel->getIteration());
+			tmpList.push(unravel);
 			unravel = unravel->getParent();
 		}
 
@@ -425,12 +466,20 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 		origin.pose = start.pose;
 		path.poses.push_back(origin);
 
+		geometry_msgs::msg::Pose prev = origin.pose;
 		while (!tmpList.empty()) {
+			PlanNode* node;
 			geometry_msgs::msg::PoseStamped p;
-			p.pose = tmpList.top();
-			tmpList.pop();
-			path.poses.push_back(p);
+			node = tmpList.top();
+
+			createArcPath(prev, node, &path);
+			p.pose = node->getPose();
+
+			//path.poses.push_back(p);
 			pathPoses.poses.push_back(p.pose);
+
+			prev = node->getPose();
+			tmpList.pop();
 
 		}
 		pathPub->publish(pathPoses);

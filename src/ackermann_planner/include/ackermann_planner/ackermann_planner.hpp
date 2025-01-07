@@ -95,7 +95,13 @@ protected:
 					  geometry_msgs::msg::Pose goal,
 					  geometry_msgs::msg::Pose cur,
 					  PlanNode *parent,
+					  double angle,
+					  double distance,
 					  bool *found);
+
+	void createArcPath(geometry_msgs::msg::Pose initial,
+				   PlanNode* node,
+				   nav_msgs::msg::Path *path);
 
 	// TF buffer
 	std::shared_ptr<tf2_ros::Buffer> tf_;

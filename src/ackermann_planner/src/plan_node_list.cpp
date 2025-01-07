@@ -3,8 +3,12 @@
 PlanNode::PlanNode(geometry_msgs::msg::Pose pose,
 		int iteration,
 		double cost,
+		double angle,
+		double distance,
 		PlanNode* parent)
-: pose_(pose), iteration_(iteration), cost_(cost), parent_(parent){
+: pose_(pose), iteration_(iteration), cost_(cost), parent_(parent),
+  angle_(angle), distance_(distance)
+{
 	this->next = NULL;
 	this->prev = NULL;
 }
@@ -19,6 +23,14 @@ PlanNode* PlanNode::getPrev() {
 
 double PlanNode::getCost() {
 	return cost_;
+}
+
+double PlanNode::getAngle() {
+	return angle_;
+}
+
+double PlanNode::getDistance() {
+	return distance_;
 }
 
 int PlanNode::getIteration() {
