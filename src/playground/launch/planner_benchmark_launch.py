@@ -43,11 +43,9 @@ def generate_launch_description():
     map_path = LaunchConfiguration('map', default=default_map_path)
 
     lifecycle_nodes = [
-        'controller_server',
         'planner_server',
-        'behavior_server',
-        'bt_navigator',
         'map_server',
+        'goal_to_action'
     ]
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
@@ -131,16 +129,6 @@ def generate_launch_description():
         actions=[
             SetParameter('use_sim_time', use_sim_time),
             Node(
-                package='nav2_controller',
-                executable='controller_server',
-                output='screen',
-                respawn=use_respawn,
-                respawn_delay=2.0,
-                parameters=[configured_params],
-                arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings + [('cmd_vel', 'cmd_vel_nav')],
-            ),
-            Node(
                 package='nav2_planner',
                 executable='planner_server',
                 name='planner_server',
@@ -150,17 +138,6 @@ def generate_launch_description():
                 parameters=[configured_params],
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=remappings,
-            ),
-            Node(
-                package='nav2_behaviors',
-                executable='behavior_server',
-                name='behavior_server',
-                output='screen',
-                respawn=use_respawn,
-                respawn_delay=2.0,
-                parameters=[configured_params],
-                arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings + [('cmd_vel', 'cmd_vel_nav')],
             ),
             Node(
                 package='nav2_map_server',
@@ -176,9 +153,9 @@ def generate_launch_description():
                 remappings=remappings,
             ),
             Node(
-                package='nav2_bt_navigator',
-                executable='bt_navigator',
-                name='bt_navigator',
+                package='goal_to_action',
+                executable='goal_to_action',
+                name='goal_to_action',
                 output='screen',
                 respawn=use_respawn,
                 respawn_delay=2.0,
