@@ -1,5 +1,7 @@
 #include "ackermann_planner/plan_node_list.hpp"
 
+#include <sstream>
+
 PlanNode::PlanNode(geometry_msgs::msg::Pose pose,
 		int iteration,
 		double cost,
@@ -134,16 +136,45 @@ PlanNode* PlanNodeList::removeLeastCost() {
 
 	tmp = cheapest;
 	cheapest = cheapest->getNext();
+
+	if (cheapest)
+		cheapest->setPrev(NULL);
+	tmp->setNext(NULL);
+
+	if(tmp == lastPeak)
+		lastPeak = cheapest;
+
+
 	return tmp;
 }
 
-void PlanNodeList::printList() {
+std::string PlanNodeList::printList() {
+	std::stringstream ss;  // Use a stringstream to build the stringa
+
 	PlanNode *cur = cheapest;
+	//printf("Cheapest: %p, lastPeak: %p\n", (void*)cheapest, (void*)lastPeak);
+	ss << "Cheapest: " << (void*)cheapest << ", lastPeak: " << (void*)lastPeak << "\n";
 	while(cur) {
-		printf("Pose: %lf,%lf , Cost: %lf\n",
-				cur->getPose().position.x,
-				cur->getPose().position.y,
-				cur->getCost());
+		ss << "Pose: " << cur->getPose().position.x << "," << cur->getPose().position.y
+			<< " , Cost: " << cur->getCost() << "\n";
+		//printf("Pose: %lf,%lf , Cost: %lf\n",
+		//		cur->getPose().position.x,
+		//		cur->getPose().position.y,
+		//		cur->getCost());
 		cur = cur->getNext();
 	}
+
+	return ss.str();
+}
+
+void PlanNodeList::emptyList() {
+	PlanNode *tmp = removeLeastCost();
+	while(tmp != NULL){
+		if (tmp)
+			delete tmp;
+		tmp = removeLeastCost();
+	}
+
+	cheapest = NULL;
+	lastPeak = NULL;
 }

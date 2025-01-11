@@ -67,7 +67,8 @@ AckermannPlanner::AckermannPlanner()
 	this->maxSteeringAngle = 30.0;
 
 	openList = new PlanNodeList();
-	stepFlag = false;
+	deleteList = new PlanNodeList();
+	stepFlag = true;
 
 }
 
@@ -217,7 +218,7 @@ poseInToleranceRange(const geometry_msgs::msg::Pose goal,
 }
 
 PlanNode*
-createPlanNode(PlanNode *parent,
+AckermannPlanner::createPlanNode(PlanNode *parent,
 			   const geometry_msgs::msg::Pose goal,
 			   const geometry_msgs::msg::Pose prev,
 			   geometry_msgs::msg::Pose pose,
@@ -239,7 +240,13 @@ createPlanNode(PlanNode *parent,
 	cost += (9 - abs(pose.position.x - prev.position.x)) * 1000;
 	cost += (9 - abs(pose.position.y - prev.position.y)) * 1000;
 
-	return new PlanNode(pose, iteration, cost, angle, distance, parent);
+	PlanNode *node = new PlanNode(pose, iteration, cost, angle, distance, parent);
+
+	if (node == NULL)
+		RCLCPP_INFO(
+			logger_, "AckermannPlanner:: Couldn't allocate");
+
+	return node;
 }
 
 void AckermannPlanner::createArcPath(geometry_msgs::msg::Pose initial,
@@ -349,6 +356,13 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 	bool pathFound = false;
 	int lastGen = 0;
 
+	//openList->printList();
+	//deleteList->printList();
+	//RCLCPP_INFO(
+	//	logger_, "AckermannPlanner:: OpenList\n%s", openList->printList().c_str());
+	//RCLCPP_INFO(
+	//	logger_, "AckermannPlanner:: DeleteList\n%s", deleteList->printList().c_str());
+
 	while(!pathFound){
 
 		if(cancel_checker())
@@ -427,6 +441,9 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 		}
 
 		parent = openList->removeLeastCost();
+		if (parent)
+			deleteList->insertNode(parent);
+
 		if (parent == NULL)
 			break;
 		cur = parent->getPose();
@@ -449,10 +466,12 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 
 	if (pathFound) {
 		PlanNode *unravel = found;
-		//std::stack<geometry_msgs::msg::Pose> tmpList;
+		std::stack<geometry_msgs::msg::Pose> poseList;
 		std::stack<PlanNode*> tmpList;
 		while (unravel != NULL) {
 			tmpList.push(unravel);
+			poseList.push(unravel->getPose());
+			printf("Unravel:%d\n", unravel->getIteration());
 			unravel = unravel->getParent();
 		}
 
@@ -471,20 +490,26 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 			PlanNode* node;
 			geometry_msgs::msg::PoseStamped p;
 			node = tmpList.top();
+			p.pose = poseList.top();
 
 			createArcPath(prev, node, &path);
-			p.pose = node->getPose();
+			//p.pose = node->getPose();
 
 			//path.poses.push_back(p);
 			pathPoses.poses.push_back(p.pose);
 
 			prev = node->getPose();
 			tmpList.pop();
+			poseList.pop();
 
 		}
 		pathPub->publish(pathPoses);
 	}
 
+	//ClearLists
+	openList->emptyList();
+	deleteList->emptyList();
+	printf("List Cleared\n");
 
 	return path;
 

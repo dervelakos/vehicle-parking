@@ -1,6 +1,8 @@
 #ifndef PLAN_NODE_LIST__PLAN_NODE_LIST_HPP_
 #define PLAN_NODE_LIST__PLAN_NODE_LIST_HPP_
 
+#include <string>
+
 #include "geometry_msgs/msg/pose.hpp"
 
 class PlanNode {
@@ -46,7 +48,8 @@ public:
 	void insertUpwards(PlanNode *node);
 	void insertNode(PlanNode *node);
 	PlanNode* removeLeastCost();
-	void printList();
+	std::string printList();
+	void emptyList();
 
 private:
 	PlanNode *lastPeak;

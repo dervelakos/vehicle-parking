@@ -1,3 +1,10 @@
+
+## Build using debug symbols
+
+```
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=debug -DCMAKE_C_FLAGS=-g
+```
+
 ## Saving a map
 To save a map
 ```

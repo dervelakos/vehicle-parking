@@ -103,6 +103,14 @@ protected:
 				   PlanNode* node,
 				   nav_msgs::msg::Path *path);
 
+
+	PlanNode* createPlanNode(PlanNode *parent,
+			   const geometry_msgs::msg::Pose goal,
+			   const geometry_msgs::msg::Pose prev,
+			   geometry_msgs::msg::Pose pose,
+			   double angle,
+			   double distance);
+
 	// TF buffer
 	std::shared_ptr<tf2_ros::Buffer> tf_;
 
@@ -127,6 +135,7 @@ protected:
 	double maxSteeringAngle; //Maximum steering angle
 
 	PlanNodeList* openList;
+	PlanNodeList* deleteList;
 	bool stepFlag;
 };
 
