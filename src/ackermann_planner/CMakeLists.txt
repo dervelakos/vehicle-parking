@@ -22,6 +22,7 @@ set(library_name ackermann_planner)
 add_library(${library_name} SHARED
   src/ackermann_planner.cpp
   src/plan_node_list.cpp
+  src/closed_points.cpp
 )
 target_include_directories(${library_name}
   PUBLIC
