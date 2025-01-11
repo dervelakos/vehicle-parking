@@ -39,7 +39,8 @@ def generate_launch_description():
     container_name_full = (namespace, '/', container_name)
     use_respawn = LaunchConfiguration('use_respawn')
     log_level = LaunchConfiguration('log_level')
-    default_map_path = os.path.join(bringup_dir, 'maps', 'campain-1.yaml')
+    default_map_path = os.path.join(bringup_dir, 'maps', 'longroute.yaml')
+    #default_map_path = os.path.join(bringup_dir, 'maps', 'campain-1.yaml')
     map_path = LaunchConfiguration('map', default=default_map_path)
 
     lifecycle_nodes = [
@@ -137,6 +138,7 @@ def generate_launch_description():
                 respawn_delay=2.0,
                 parameters=[configured_params],
                 arguments=['--ros-args', '--log-level', log_level],
+                #prefix=['valgrind --leak-check=full'],
                 remappings=remappings,
             ),
             Node(
