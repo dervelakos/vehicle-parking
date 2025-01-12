@@ -90,6 +90,10 @@ AckermannPlanner::configure(
 	costmap_ = costmap_ros->getCostmap();
 	global_frame_ = costmap_ros->getGlobalFrameID();
 
+	closedPoints = new ClosedPointsPlane(costmap_->getSizeInCellsX(),
+										 costmap_->getSizeInCellsY(),
+										 10); //10 degrees rotation tolerance
+
 	//node_ = parent;
 	auto node = parent.lock();
 	clock_ = node->get_clock();
@@ -148,6 +152,10 @@ AckermannPlanner::step(
 
 	RCLCPP_INFO(
 		logger_, "CostMap resolution: %f", costmap_->getResolution());
+
+	RCLCPP_INFO(
+		logger_, "CostMap cells: %u, %u", costmap_->getSizeInCellsX(),
+		costmap_->getSizeInCellsY());
 
 	stepFlag = true;
 
@@ -292,6 +300,11 @@ PlanNode* AckermannPlanner::registerPose( geometry_msgs::msg::Pose pose,
 		return NULL;
 	}
 
+	if(closedPoints->isClosed(mx, my, poseToYaw(pose))){
+		return NULL;
+	}
+	closedPoints->closePoint(mx, my, poseToYaw(pose));
+
 	PlanNode *tmpNode = createPlanNode(parent,
 									goal,
 									cur,
@@ -356,12 +369,22 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 	bool pathFound = false;
 	int lastGen = 0;
 
+	if (costmap_->getSizeInCellsX() != closedPoints->getCellsX() ||
+			costmap_->getSizeInCellsY() != closedPoints->getCellsY())
+	{
+		bool res = closedPoints->resize(costmap_->getSizeInCellsX(),
+							 costmap_->getSizeInCellsY());
+		RCLCPP_INFO(
+			logger_, "AckermannPlanner:: resize done(%d)", res);
+	}
+
 	//openList->printList();
 	//deleteList->printList();
 	//RCLCPP_INFO(
 	//	logger_, "AckermannPlanner:: OpenList\n%s", openList->printList().c_str());
 	//RCLCPP_INFO(
 	//	logger_, "AckermannPlanner:: DeleteList\n%s", deleteList->printList().c_str());
+	closedPoints->nextEpoch();
 
 	while(!pathFound){
 
@@ -438,6 +461,8 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 			validPosePub->publish(validPoses);
 			invalidPosePub->publish(invalidPoses);
 
+			validPoses.poses.clear();
+			invalidPoses.poses.clear();
 		}
 
 		parent = openList->removeLeastCost();

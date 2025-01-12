@@ -34,6 +34,12 @@ public:
 	bool isClosed(uint mx, uint my, double angle);
 	void closePoint(uint mx, uint my, double angle);
 
+	bool resize(uint cellsX, uint cellsY);
+	void shrink(uint newSize);
+	bool expand(uint newSize);
+	uint getCellsX();
+	uint getCellsY();
+
 protected:
 
 	inline unsigned int getIndex(unsigned int mx, unsigned int my)
@@ -44,6 +50,7 @@ protected:
 	int epoch;
 	unsigned int x_;
 	unsigned int y_;
+	double angleTolerance_;
 
 	ClosedPoint** data;
 

@@ -1,6 +1,7 @@
 #include "ackermann_planner/closed_points.hpp"
 
 #include <cmath>
+#include <iostream>
 
 double normalizeAngleDegrees(double angle) {
 	double normalizedAngle = fmod(angle, 360.0);
@@ -61,8 +62,9 @@ void ClosedPoint::closeAngle(double angle, uint planeEpoch)
 ClosedPointsPlane::ClosedPointsPlane(unsigned int cellsX,
 									 unsigned int cellsY,
 									 double angleTolerance)
-: x_(cellsX), y_(cellsY)
+: x_(cellsX), y_(cellsY), angleTolerance_(angleTolerance)
 {
+	printf("Initialized with %u, %u\n", cellsX, cellsY);
 	uint pointsNum = getIndex(cellsX, cellsY);
 	epoch = 1;
 	data = new ClosedPoint*[pointsNum];
@@ -82,7 +84,6 @@ ClosedPointsPlane::~ClosedPointsPlane()
 	delete [] data;
 }
 
-
 void ClosedPointsPlane::nextEpoch()
 {
 	epoch++;
@@ -91,7 +92,18 @@ void ClosedPointsPlane::nextEpoch()
 bool
 ClosedPointsPlane::isClosed(uint mx, uint my, double angle)
 {
-	return data[getIndex(mx,my)]->isClosed(
+	if(mx > x_ || my > y_){
+		printf("Point outside of map!\n");
+		return true;
+	}
+
+	ClosedPoint *p = data[getIndex(mx,my)];
+	if (p == NULL){
+		printf("Point not initialized!\n");
+		return true;
+	}
+
+	return p->isClosed(
 		normalizeAngleDegrees(angle),
 		epoch
 	);
@@ -105,4 +117,73 @@ ClosedPointsPlane::closePoint(uint mx, uint my, double angle)
 		normalizeAngleDegrees(angle),
 		epoch
 	);
+}
+
+void
+ClosedPointsPlane::shrink(uint newSize)
+{
+	ClosedPoint **newData = new ClosedPoint*[newSize];
+	uint oldPointsNum = getIndex(x_, y_);
+
+	for (uint i=0; i<newSize; i++) {
+		newData[i] = data[i];
+	}
+	for (uint i=newSize; i<oldPointsNum; i++) {
+		delete data[i];
+	}
+
+	delete [] data;
+	data = newData;
+}
+
+bool
+ClosedPointsPlane::expand(uint newSize)
+{
+	ClosedPoint **newData = new ClosedPoint*[newSize];
+	uint oldPointsNum = getIndex(x_, y_);
+
+	for (uint i=0; i<oldPointsNum; i++) {
+		newData[i] = data[i];
+	}
+	for (uint i=oldPointsNum; i<newSize; i++) {
+		newData[i] = new ClosedPoint(angleTolerance_);
+		if (newData[i] == NULL)
+			return false;
+	}
+
+	delete [] data;
+	data = newData;
+	return true;
+}
+
+bool
+ClosedPointsPlane::resize(uint cellsX, uint cellsY)
+{
+	bool res = true;
+	uint pointsNum = cellsY * cellsX + cellsX;
+	uint oldPointsNum = getIndex(x_, y_);
+
+	printf("Resized to %u, %u\n", cellsX, cellsY);
+	nextEpoch();
+
+	if (pointsNum > oldPointsNum)
+		res = expand(pointsNum);
+	else
+		shrink(pointsNum);
+
+	x_ = cellsX;
+	y_ = cellsY;
+	return res;
+}
+
+uint
+ClosedPointsPlane::getCellsX()
+{
+	return x_;
+}
+
+uint
+ClosedPointsPlane::getCellsY()
+{
+	return y_;
 }

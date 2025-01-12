@@ -2,6 +2,7 @@
 #define ACKERMANN_PLANNER__ACKERMANN_PLANNER_HPP_
 
 #include "ackermann_planner/plan_node_list.hpp"
+#include "ackermann_planner/closed_points.hpp"
 
 #include "std_srvs/srv/trigger.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
@@ -125,6 +126,8 @@ protected:
 
 	// The global frame of the costmap
 	std::string global_frame_, name_;
+
+	ClosedPointsPlane* closedPoints;
 
 	rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr service;
 	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr validPosePub;
