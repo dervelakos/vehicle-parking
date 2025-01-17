@@ -346,13 +346,13 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 			std::to_string(start.pose.position.y) + ") was outside bounds");
 	}
 
-	geometry_msgs::msg::PoseArray invalidPoses;
-	invalidPoses.header.stamp = clock_->now();
-	invalidPoses.header.frame_id = "map";
+	//geometry_msgs::msg::PoseArray invalidPoses;
+	//invalidPoses.header.stamp = clock_->now();
+	//invalidPoses.header.frame_id = "map";
 
-	geometry_msgs::msg::PoseArray validPoses;
-	validPoses.header.stamp = clock_->now();
-	validPoses.header.frame_id = "map";
+	//geometry_msgs::msg::PoseArray validPoses;
+	//validPoses.header.stamp = clock_->now();
+	//validPoses.header.frame_id = "map";
 
 	geometry_msgs::msg::PoseArray pathPoses;
 	pathPoses.header.stamp = clock_->now();
@@ -419,14 +419,14 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 					newNode = registerPose(newPose, goal.pose, cur, parent,
 										   testAngle, j, &res);
 					if (newNode){
-						validPoses.poses.push_back(newPose);
+						//validPoses.poses.push_back(newPose);
 						if (res){
 							pathFound = true;
 							found = newNode;
 						}
 					}else{
 						forwardValid = false;
-						invalidPoses.poses.push_back(newPose);
+						//invalidPoses.poses.push_back(newPose);
 					}
 				}
 
@@ -436,14 +436,14 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 					newNode = registerPose(newPose, goal.pose, cur, parent,
 										   testAngle, -j, &res);
 					if (newNode){
-						validPoses.poses.push_back(newPose);
+						//validPoses.poses.push_back(newPose);
 						if (res){
 							pathFound = true;
 							found = newNode;
 						}
 					}else{
 						reverseValid = false;
-						invalidPoses.poses.push_back(newPose);
+						//invalidPoses.poses.push_back(newPose);
 					}
 				}
 
@@ -458,11 +458,11 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 					break;
 			}
 
-			validPosePub->publish(validPoses);
-			invalidPosePub->publish(invalidPoses);
+			//validPosePub->publish(validPoses);
+			//invalidPosePub->publish(invalidPoses);
 
-			validPoses.poses.clear();
-			invalidPoses.poses.clear();
+			//validPoses.poses.clear();
+			//invalidPoses.poses.clear();
 		}
 
 		parent = openList->removeLeastCost();
@@ -485,8 +485,8 @@ nav_msgs::msg::Path AckermannPlanner::createPlan(
 
 	//openList->printList();
 
-	validPosePub->publish(validPoses);
-	invalidPosePub->publish(invalidPoses);
+	//validPosePub->publish(validPoses);
+	//invalidPosePub->publish(invalidPoses);
 
 
 	if (pathFound) {

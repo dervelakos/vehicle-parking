@@ -232,6 +232,12 @@ def generate_launch_description():
                 arguments=['--ros-args', '--log-level', log_level],
                 parameters=[{'autostart': autostart}, {'node_names': lifecycle_nodes}],
             ),
+            Node(
+                package='tf2_ros',
+                executable='static_transform_publisher',
+                name='my_static_tf_publisher2',
+                arguments=["0", "0", "0", "0", "0", "0", "1", "base_link", "base_footprint"]
+            ),
         ],
     )
 

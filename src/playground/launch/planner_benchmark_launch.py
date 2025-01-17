@@ -177,7 +177,8 @@ def generate_launch_description():
                 package='tf2_ros',
                 executable='static_transform_publisher',
                 name='my_static_tf_publisher',
-                arguments=["10.819", "9.364", "0", "0", "0", "0.707", "-0.707", "map", "base_link"]
+                arguments=["12.819", "9.364", "0", "0", "0", "0.707", "-0.707", "map", "base_link"]
+                #arguments=["10.819", "9.364", "0", "0", "0", "0.707", "-0.707", "map", "base_link"]
             ),
             Node(
                 package='tf2_ros',
