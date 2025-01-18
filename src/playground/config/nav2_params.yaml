@@ -192,10 +192,10 @@ local_costmap:
       global_frame: odom
       robot_base_frame: base_link
       rolling_window: true
-      width: 3
-      height: 3
-      resolution: 0.05
-      robot_radius: 0.22
+      width: 7
+      height: 7
+      resolution: 0.2
+      robot_radius: 0.7
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
@@ -218,7 +218,7 @@ local_costmap:
           #   * User chosen topic is `scan`.
           #   * Topic will be remapped to `/tb4/scan` without `local_costmap`.
           #   * Use global topic `/scan` if you do not wish the node namespace to apply
-          topic: scan
+          topic: /scan
           max_obstacle_height: 2.0
           clearing: True
           marking: True
@@ -254,7 +254,7 @@ global_costmap:
           #   * User chosen topic is `scan`.
           #   * Topic will be remapped to `/tb4/scan` without `global_costmap`.
           #   * Use global topic `/scan` if you do not wish the node namespace to apply
-          topic: scan
+          topic: /scan
           max_obstacle_height: 2.0
           clearing: True
           marking: True
